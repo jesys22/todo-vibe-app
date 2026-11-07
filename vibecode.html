@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Список задач | Vibe Coder</title>
+    <style>
+        :root {
+            --bg-primary: #f5f5f7; --bg-secondary: #ffffff;
+            --text-primary: #1d1d1f; --text-secondary: #6e6e73;
+            --accent: #007aff; --accent-hover: #0051d5;
+            --danger: #ff3b30; --success: #34c759;
+            --border: #d2d2d7; --shadow: rgba(0, 0, 0, 0.08);
+        }
+        [data-theme="dark"] {
+            --bg-primary: #1c1c1e; --bg-secondary: #2c2c2e;
+            --text-primary: #ffffff; --text-secondary: #98989d;
+            --accent: #0a84ff; --accent-hover: #409cff;
+            --danger: #ff453a; --success: #30d158;
+            --border: #38383a; --shadow: rgba(0, 0, 0, 0.3);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary); color: var(--text-primary);
+            min-height: 100vh; display: flex; justify-content: center; align-items: center;
+            padding: 20px; transition: background 0.3s, color 0.3s;
+        }
+        .container {
+            background: var(--bg-secondary); border-radius: 20px;
+            box-shadow: 0 10px 40px var(--shadow); width: 100%; max-width: 480px; padding: 32px;
+        }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        h1 { font-size: 28px; font-weight: 700; }
+        .theme-toggle {
+            background: none; border: 2px solid var(--border); border-radius: 50%;
+            width: 40px; height: 40px; cursor: pointer; font-size: 18px;
+            display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+        }
+        .theme-toggle:hover { border-color: var(--accent); transform: scale(1.05); }
+        .input-group { display: flex; gap: 12px; margin-bottom: 24px; }
+        #taskInput {
+            flex: 1; padding: 14px 18px; border: 2px solid var(--border); border-radius: 12px;
+            font-size: 16px; background: var(--bg-primary); color: var(--text-primary); outline: none;
+        }
+        #taskInput:focus { border-color: var(--accent); }
+        #addBtn {
+            padding: 14px 24px; background: var(--accent); color: white; border: none;
+            border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer;
+        }
+        .stats { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; font-size: 14px; color: var(--text-secondary); }
+        .clear-completed { background: none; border: none; color: var(--accent); cursor: pointer; }
+        #taskList { list-style: none; max-height: 400px; overflow-y: auto; }
+        .task-item {
+            display: flex; align-items: center; gap: 12px; padding: 16px;
+            background: var(--bg-primary); border-radius: 12px; margin-bottom: 8px;
+            animation: slideIn 0.3s ease; transition: opacity 0.3s, transform 0.3s;
+        }
+        .task-item.removing { animation: slideOut 0.3s ease forwards; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideOut { to { opacity: 0; transform: translateX(100%); } }
+        .task-checkbox { width: 22px; height: 22px; cursor: pointer; accent-color: var(--success); }
+        .task-text { flex: 1; font-size: 16px; word-break: break-word; }
+        .task-item.completed .task-text { text-decoration: line-through; color: var(--text-secondary); }
+        .delete-btn { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 20px; }
+        .empty-state { text-align: center; padding: 40px 20px; color: var(--text-secondary); display: none; }
+        @media (max-width: 480px) { .input-group { flex-direction: column; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📝 Задачи</h1>
+            <button class="theme-toggle" id="themeToggle" title="Переключить тему">🌙</button>
+        </div>
+        <div class="input-group">
+            <input type="text" id="taskInput" placeholder="Что нужно сделать?" maxlength="200">
+            <button id="addBtn">Добавить</button>
+        </div>
+        <div class="stats">
+            <span id="taskCounter">0 из 0 выполнено</span>
+            <button class="clear-completed" id="clearCompleted">Очистить выполненные</button>
+        </div>
+        <ul id="taskList"></ul>
+        <div class="empty-state" id="emptyState">
+            <div style="font-size: 48px; margin-bottom: 12px;">✨</div>
+            <p>Нет задач. Добавьте первую!</p>
+        </div>
+    </div>
+
+    <script>
+        let tasks = JSON.parse(localStorage.getItem('vibeTasks')) || [];
+        let theme = localStorage.getItem('theme') || 'light';
+
+        const taskInput = document.getElementById('taskInput');
+        const addBtn = document.getElementById('addBtn');
+        const taskList = document.getElementById('taskList');
+        const emptyState = document.getElementById('emptyState');
+        const taskCounter = document.getElementById('taskCounter');
+        const clearCompletedBtn = document.getElementById('clearCompleted');
+        const themeToggle = document.getElementById('themeToggle');
+
+        if (theme === 'dark') {
+            document.documentElement.setAttribute('data-theme', 'dark');
+            themeToggle.textContent = '☀️';
+        }
+
+        function save() {
+            localStorage.setItem('vibeTasks', JSON.stringify(tasks));
+        }
+
+        function render() {
+            taskList.innerHTML = '';
+            
+            tasks.forEach((task, index) => {
+                const li = document.createElement('li');
+                li.className = 'task-item' + (task.completed ? ' completed' : '');
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'task-checkbox';
+                checkbox.checked = task.completed;
+                checkbox.addEventListener('change', () => toggleTask(index));
+
+                const textSpan = document.createElement('span');
+                textSpan.className = 'task-text';
+                textSpan.textContent = task.text; // БЕЗОПАСНЫЙ ВЫВОД
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.textContent = '×';
+                deleteBtn.addEventListener('click', () => deleteTask(index, li));
+
+                li.appendChild(checkbox);
+                li.appendChild(textSpan);
+                li.appendChild(deleteBtn);
+                taskList.appendChild(li);
+            });
+
+            const completed = tasks.filter(t => t.completed).length;
+            taskCounter.textContent = `${completed} из ${tasks.length} выполнено`;
+            emptyState.style.display = tasks.length === 0 ? 'block' : 'none';
+        }
+
+        function addTask() {
+            const text = taskInput.value.trim();
+            if (!text) return;
+            tasks.unshift({ text: text, completed: false });
+            taskInput.value = '';
+            taskInput.focus();
+            save();
+            render();
+        }
+
+        function toggleTask(index) {
+            tasks[index].completed = !tasks[index].completed;
+            save();
+            render();
+        }
+
+        function deleteTask(index, element) {
+            element.classList.add('removing');
+            setTimeout(() => {
+                tasks.splice(index, 1);
+                save();
+                render();
+            }, 300);
+        }
+
+        function clearCompleted() {
+            tasks = tasks.filter(t => !t.completed);
+            save();
+            render();
+        }
+
+        function toggleTheme() {
+            theme = theme === 'light' ? 'dark' : 'light';
+            if (theme === 'dark') {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                themeToggle.textContent = '☀️';
+            } else {
+                document.documentElement.removeAttribute('data-theme');
+                themeToggle.textContent = '🌙';
+            }
+            localStorage.setItem('theme', theme);
+        }
+
+        addBtn.addEventListener('click', addTask);
+        taskInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') addTask(); });
+        clearCompletedBtn.addEventListener('click', clearCompleted);
+        themeToggle.addEventListener('click', toggleTheme);
+
+        render();
+    </script>
+</body>
+</html>
